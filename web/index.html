@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Code to Life</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/cytoscape.min.js" defer></script>
+  <script src="/plan.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header>
+    <div><h1>Code to Life</h1><p id="project"></p></div>
+    <div class="controls">
+      <input id="search" type="search" placeholder="Search files and symbols" aria-label="Search files and symbols">
+      <select id="view" aria-label="Graph view">
+        <option value="modules">Modules</option>
+        <option value="symbols">Symbols</option>
+      </select>
+      <button id="fit">Fit graph</button>
+      <button id="refresh">Refresh</button>
+      <button id="plan-toggle" aria-pressed="false" aria-controls="plan">Plan</button>
+      <button id="changes-toggle" aria-pressed="false" aria-controls="changes">What changed</button>
+      <button id="debug-toggle" aria-pressed="false" aria-controls="debug" hidden>Debugger</button>
+    </div>
+  </header>
+  <main>
+    <section class="canvas" aria-label="Dependency graph">
+      <div id="graph"></div>
+      <p id="status" role="status">Loading project…</p>
+    </section>
+    <aside aria-label="Graph details">
+      <section id="matches" hidden><h2>Search results</h2><ul id="results"></ul></section>
+      <section id="plan" hidden>
+        <h2>Plan</h2>
+        <div class="controls plan-actions">
+          <button id="plan-new" type="button">New module</button>
+          <button id="plan-reload" type="button">Reload</button>
+        </div>
+        <p id="plan-status" role="status"></p>
+        <ul id="plan-modules"></ul>
+        <form id="plan-form">
+          <label for="plan-file">Proposed file</label>
+          <input id="plan-file" required maxlength="240" placeholder="src/Checkout.tsx">
+          <label for="plan-name">Export name</label>
+          <input id="plan-name" required maxlength="80" placeholder="Checkout">
+          <label for="plan-kind">Kind</label>
+          <select id="plan-kind"><option value="function">Function</option><option value="component">Component</option></select>
+          <label for="plan-note">Notes</label>
+          <textarea id="plan-note" rows="2" maxlength="3000"></textarea>
+          <label for="plan-dependencies">Dependencies, one project-relative file per line</label>
+          <textarea id="plan-dependencies" rows="3" aria-describedby="plan-dependency-help"></textarea>
+          <p id="plan-dependency-help">Shift-click a module on the graph to add its path.</p>
+          <div class="controls">
+            <button id="plan-save">Save module</button>
+            <button id="plan-delete" type="button">Remove</button>
+            <button id="plan-stub" type="button">Preview stub</button>
+          </div>
+          <textarea id="plan-preview" aria-label="TypeScript stub" rows="5" readonly hidden></textarea>
+        </form>
+      </section>
+      <section id="debug" hidden>
+        <h2 id="debug-title">Node.js debugger</h2>
+        <p id="debug-entry"></p>
+        <p id="debug-status" role="status"></p>
+        <div id="debug-actions" class="controls">
+          <button data-action="start">Start</button>
+          <button data-action="continue">Continue</button>
+          <button data-action="pause">Pause</button>
+          <button data-action="over">Step over</button>
+          <button data-action="into">Step into</button>
+          <button data-action="out">Step out</button>
+          <button data-action="stop">Stop</button>
+        </div>
+        <h3 id="debug-breakpoint-heading" hidden>Breakpoints</h3>
+        <ul id="debug-breakpoints"></ul>
+        <h3 id="debug-stack-heading" hidden>Call stack</h3>
+        <ul id="debug-frames"></ul>
+        <div>
+          <h3>CPU profile</h3>
+          <div id="profile-actions" class="controls">
+            <button id="profile-start">Record CPU</button>
+            <button id="profile-stop">Finish recording</button>
+          </div>
+          <p id="profile-status" role="status"></p>
+          <ul id="profile-results"></ul>
+        </div>
+        <details id="debug-log"><summary>Process output</summary><pre id="debug-output"></pre></details>
+      </section>
+      <section id="changes" hidden>
+        <h2>What changed</h2>
+        <form id="changes-form">
+          <label for="changes-base">Base branch or commit</label>
+          <div class="controls">
+            <input id="changes-base" type="text" placeholder="Auto-detect" autocomplete="off">
+            <button id="changes-run">Compare</button>
+          </div>
+        </form>
+        <p id="changes-status" role="status"></p>
+        <div id="changes-files"></div>
+      </section>
+      <section id="details"><h2>Project overview</h2></section>
+      <section id="rules" hidden><h2>Architecture rules</h2><ul id="violations"></ul></section>
+    </aside>
+  </main>
+</body>
+</html>
