@@ -1,5 +1,8 @@
 const byId = id => document.getElementById(id);
-const state = { graph: null, items: new Map(), incoming: new Map(), outgoing: new Map(), changes: null, showChanges: false };
+const state = {
+  graph: null, items: new Map(), incoming: new Map(), outgoing: new Map(), changes: null, showChanges: false,
+  explanations: {}, glossary: [], inspecting: null, ai: null
+};
 const cy = cytoscape({
   container: byId('graph'),
   style: [
@@ -136,11 +139,120 @@ function arrange() {
 function overview() {
   const graph = state.graph;
   if (!graph) return;
+  state.inspecting = null;
   const details = byId('details');
   details.replaceChildren(element('h2', 'Project overview'),
     element('p', graph.nodes.filter(node => node.kind === 'module').length + ' files · ' +
       graph.tests.length + ' test files · ' + graph.violations.length + ' architecture violations'));
   for (const warning of graph.warnings) details.append(element('p', warning));
+  const explained = Object.keys(state.explanations).length;
+  details.append(element('h3', 'Explanations'), element('p', explained ?
+    explained + ' files and functions have a plain-English explanation. Select one on the graph to read it.' :
+    'No explanations yet. Select any file or function to read its code.'));
+  if (state.ai) {
+    details.append(element('p', 'Select a file or function and choose Explain with AI to have ' + state.ai.label +
+      ' write one (model ' + state.ai.model + ').'));
+  } else if (!explained) {
+    details.append(explainHint());
+  }
+  if (state.glossary.length) {
+    details.append(element('h3', 'Tools this project uses'), glossaryList(state.glossary));
+  }
+}
+
+function aiButton(id, existing) {
+  const box = document.createElement('div');
+  box.className = 'ai-explain';
+  const button = element('button', (existing ? 'Rewrite' : 'Explain') + ' with AI');
+  button.type = 'button';
+  const status = element('p', '');
+  status.setAttribute('role', 'status');
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    status.textContent = 'Asking ' + state.ai.label + '… this can take a minute on a local model.';
+    try {
+      const response = await fetch('/api/explain?' + new URLSearchParams({ id }), { method: 'POST' });
+      if (!response.ok) throw new Error(await response.text());
+      const saved = await response.json();
+      state.explanations[id] = { summary: saved.summary, stale: false, updated: saved.updated };
+      if (state.inspecting === id) inspect(id);
+    } catch (error) {
+      button.disabled = false;
+      status.textContent = error.message;
+    }
+  });
+  box.append(button, status);
+  return box;
+}
+
+function explainHint() {
+  const hint = element('p', 'To add explanations, connect the codetolife-js MCP server to Claude Code and ask: ');
+  hint.className = 'hint';
+  hint.append(element('q', 'Use explain_next and save_explanation to explain this project for a new developer.'));
+  return hint;
+}
+
+function glossaryList(items) {
+  const list = document.createElement('dl');
+  list.className = 'glossary';
+  for (const item of items) {
+    const term = element('dt', item.term + ' ');
+    term.append(element('code', item.package));
+    list.append(term, element('dd', item.meaning));
+  }
+  return list;
+}
+
+async function loadExplanations() {
+  try {
+    const response = await fetch('/api/explanations');
+    if (!response.ok) throw new Error(await response.text());
+    const data = await response.json();
+    state.explanations = data.explanations;
+    state.glossary = data.glossary;
+    state.ai = data.ai;
+  } catch (error) {
+    state.explanations = {};
+    state.glossary = [];
+    state.ai = null;
+    byId('status').textContent = 'Explanations unavailable: ' + error.message;
+  }
+  if (state.inspecting) inspect(state.inspecting);
+  else overview();
+}
+
+function codeBlock(source) {
+  const pre = document.createElement('pre');
+  pre.className = 'code';
+  pre.tabIndex = 0;
+  pre.setAttribute('aria-label', 'Source of ' + source.file + ', lines ' + source.start + ' to ' + source.end);
+  const width = String(source.end).length;
+  source.code.split('\n').forEach((text, index) => {
+    const row = document.createElement('span');
+    row.className = 'line';
+    const number = element('span', String(source.start + index).padStart(width));
+    number.className = 'ln';
+    number.setAttribute('aria-hidden', 'true');
+    row.append(number, document.createTextNode(text + '\n'));
+    pre.append(row);
+  });
+  return pre;
+}
+
+async function showSource(id, slot) {
+  slot.replaceChildren(element('p', 'Loading code…'));
+  try {
+    const response = await fetch('/api/source?' + new URLSearchParams({ id }));
+    if (!response.ok) throw new Error(await response.text());
+    const source = await response.json();
+    if (state.inspecting !== id) return;
+    const label = source.start === 1 && source.end === source.total ?
+      source.total + ' lines' : 'Lines ' + source.start + '–' + source.end + ' of ' + source.total;
+    slot.replaceChildren(element('h3', 'Code'), element('p', label), codeBlock(source));
+    if (source.glossary.length) slot.append(element('h3', 'Packages this file uses'), glossaryList(source.glossary));
+  } catch (error) {
+    if (state.inspecting === id) slot.replaceChildren(element('h3', 'Code'), element('p', error.message));
+  }
 }
 
 function upstreamTests(id) {
@@ -179,10 +291,29 @@ function focus(id) {
 function inspect(id) {
   const node = state.items.get(id);
   const details = byId('details');
+  state.inspecting = id;
   details.replaceChildren(element('h2', node.name), element('p', node.kind + ' · ' + node.file + ':' + node.line));
+  const explanation = state.explanations[id];
+  const about = document.createElement('div');
+  about.className = 'explanation';
+  about.append(element('h3', 'What it does'));
+  if (explanation) {
+    about.append(element('p', explanation.summary));
+    if (explanation.stale) {
+      const stale = element('p', 'The code has changed since this was written, so it may be out of date.');
+      stale.className = 'stale';
+      about.append(stale);
+    }
+  } else {
+    about.append(element('p', 'No explanation yet. Read the code below, or follow the connections to see how it is used.'));
+  }
+  if (state.ai && (!explanation || explanation.stale)) about.append(aiButton(id, explanation));
+  const code = document.createElement('div');
+  details.append(about, code);
+  showSource(id, code);
   for (const [label, edges, end] of [
-    ['Incoming', state.incoming.get(id) ?? [], 'from'],
-    ['Outgoing', state.outgoing.get(id) ?? [], 'to']
+    ['Used by (incoming)', state.incoming.get(id) ?? [], 'from'],
+    ['Uses (outgoing)', state.outgoing.get(id) ?? [], 'to']
   ]) {
     if (!edges.length) continue;
     const list = document.createElement('ul');
@@ -260,6 +391,7 @@ function applyGraph(graph) {
   indexEdges(graph);
   render();
   search();
+  loadExplanations();
   byId('rules').hidden = !graph.violations.length;
   byId('violations').replaceChildren(...graph.violations.map(edge =>
     listRow(edge.file + ' → ' + edge.target + (edge.because ? ' · ' + edge.because : ''), () => focus(edge.from))));

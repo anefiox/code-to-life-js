@@ -106,6 +106,23 @@ test('browser entry point serves the local graph and blocks cross-origin request
   const foreign = await fetch(url + '/api/graph', { headers: { Origin: 'https://external.example' } });
   assert.equal(foreign.status, 403);
 
+  const replaced = refreshedGraph.nodes.find(node => node.name === 'replaced');
+  const sourceResponse = await fetch(url + '/api/source?' + new URLSearchParams({ id: replaced.id }));
+  assert.equal(sourceResponse.status, 200);
+  const source = await sourceResponse.json();
+  assert.equal(source.code, 'export function replaced() { return 1; }');
+  assert.deepEqual(source.glossary, []);
+  for (const id of ['module:../outside.js', '']) {
+    const missing = await fetch(url + '/api/source?' + new URLSearchParams({ id }));
+    assert.equal(missing.status, 404);
+    await missing.text();
+  }
+  const explanations = await (await fetch(url + '/api/explanations')).json();
+  assert.deepEqual(explanations, { explanations: {}, glossary: [], ai: null });
+  const noAi = await fetch(url + '/api/explain?id=x', { method: 'POST', headers: { Origin: url } });
+  assert.equal(noAi.status, 404);
+  assert.match(await noAi.text(), /--ai/);
+
   const planUrl = url + '/api/plan';
   const emptyPlan = await (await fetch(planUrl)).json();
   assert.deepEqual(emptyPlan, { version: 1, modules: [], revision: null });

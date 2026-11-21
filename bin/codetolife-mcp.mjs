@@ -8,12 +8,14 @@ import { analyze, projectRoot } from '../lib/project.mjs';
 import { GraphQueries } from '../lib/graph-queries.mjs';
 import { graphChanges } from '../lib/graph-changes.mjs';
 import { configuredDebugger, debugOptions } from '../lib/debug.mjs';
+import { explanationGuidance, explanationQueue, readSource, saveExplanation } from '../lib/explain.mjs';
 
 const selector = z.string().trim().min(1).max(4096).describe('Exact graph node ID, symbol name, or project-relative file.');
 const count = z.number().int().min(1).max(100).default(25);
 const offset = z.number().int().min(0).default(0);
 const paging = { limit: count, offset };
 const depth = z.number().int().min(1).max(30).default(8);
+const codeLimit = 12000;
 
 function page(items, { limit, offset }) {
   return { total: items.length, offset, items: items.slice(offset, offset + limit) };
@@ -30,7 +32,7 @@ function createServer(root, debug) {
   function tool(name, description, input, handler, readOnly = true) {
     server.registerTool(name, {
       description, inputSchema: z.object(input).strict(),
-      annotations: readOnly ?
+      annotations: typeof readOnly === 'object' ? readOnly : readOnly ?
         { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } :
         { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true }
     }, async args => {
@@ -107,6 +109,33 @@ function createServer(root, debug) {
       const { baseline, files } = graphChanges(queries.graph, base);
       return { baseline, ...page(files, options) };
     });
+
+  tool('explain_next', 'List files and functions that still need a plain-English explanation for the Code to Life ' +
+    'learning panel, hubs first, with their source. Write each with save_explanation. Stale items have changed since ' +
+    'they were explained.',
+    { limit: z.number().int().min(1).max(20).default(5), offset }, ({ limit, offset }) => {
+      const index = graph();
+      const queue = explanationQueue(root, index.graph);
+      return {
+        guidance: explanationGuidance, total: queue.length, offset,
+        items: queue.slice(offset, offset + limit).map(({ node, stale, links }) => {
+          const source = readSource(root, index.graph, node.id);
+          const code = source.code.length > codeLimit ? source.code.slice(0, codeLimit) : source.code;
+          return { id: node.id, name: node.name, kind: node.kind, file: node.file, lines: [source.start, source.end],
+            stale, links, truncated: code !== source.code, code };
+        })
+      };
+    });
+
+  tool('save_explanation', 'Save a plain-English explanation of one file or function. It appears in the Code to Life ' +
+    'panel when that node is selected, and is stored in .codetolife/explanations.json in the project.',
+    { node: selector, summary: z.string().trim().min(1).max(2000) },
+    ({ node, summary }) => {
+      const index = graph();
+      const resolved = index.resolve(node);
+      if (resolved.error) return resolved;
+      return saveExplanation(root, index.graph, resolved.node.id, summary);
+    }, { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
 
   if (debug) {
     const snapshot = () => debug.snapshot(graph().graph);

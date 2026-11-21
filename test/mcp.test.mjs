@@ -29,7 +29,7 @@ test('opt-in MCP debugger launches a script, maps a breakpoint, steps, and stops
     ] });
     await client.connect(transport);
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 16);
+    assert.equal(tools.length, 18);
     assert.equal(tools.find(tool => tool.name === 'debug_launch').annotations.readOnlyHint, false);
     assert.equal(tools.find(tool => tool.name === 'debug_where').annotations.readOnlyHint, true);
 
@@ -88,8 +88,9 @@ test('stdio MCP client can query a project and use the optional Git review', { t
 
     await client.connect(transport);
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 10);
-    assert.ok(tools.every(tool => tool.annotations.readOnlyHint));
+    assert.equal(tools.length, 12);
+    assert.ok(tools.every(tool => tool.annotations.readOnlyHint || tool.name === 'save_explanation'));
+    assert.equal(tools.find(tool => tool.name === 'save_explanation').annotations.destructiveHint, false);
     const call = async (name, args = {}) => {
       const response = await client.callTool({ name, arguments: args });
       assert.ok(!response.isError, JSON.stringify(response));
@@ -113,6 +114,16 @@ test('stdio MCP client can query a project and use the optional Git review', { t
     assert.deepEqual((await call('tests_for', { node: target })).items, ['app.test.js']);
     assert.deepEqual((await call('impact', { node: target })).items.map(item => item.distance), [1, 2]);
     assert.equal((await call('check_architecture')).items[0].target, 'math.js');
+    const next = await call('explain_next', { limit: 2 });
+    assert.match(next.guidance, /new to coding/);
+    assert.equal(next.items[0].kind, 'module');
+    assert.equal(next.items.length, 2);
+    assert.ok(next.items.every(item => typeof item.code === 'string'));
+    const saved = await call('save_explanation', { node: target, summary: 'Doubles a number.' });
+    assert.equal(saved.key, 'math.js#double');
+    assert.ok(!(await call('explain_next', { limit: 20 })).items.some(item => item.id === target));
+    const unknown = await client.callTool({ name: 'save_explanation', arguments: { node: 'missing', summary: 'x' } });
+    assert.equal(unknown.isError, true);
 
     put('math.js', 'export function double(n) { return n * 3; }\n');
     put('new.ts', 'export const ready = (): boolean => true;\n');

@@ -29,6 +29,45 @@ For a global command from a local checkout, run `npm link` once in this reposito
 - Pass `--json` to export the graph and rule violations.
 - Open **What changed** to compare the working tree, including untracked files, with the merge base. Leave the base blank to use PR Buddy’s default branch lookup or enter a branch or commit. The graph outlines changed modules and symbols. Expand a file to see its semantic changes and findings, including deleted files and changes outside the source graph.
 
+### Learn a new codebase
+
+Select any file or function to read it in the side panel. The panel shows:
+
+- **What it does:** a short plain-English explanation, when one has been written. If the code has changed since, the panel says the explanation may be out of date.
+- **Code:** the file, or just the selected function, with line numbers.
+- **Packages this file uses:** what each third-party package is for, such as Hapi, Nunjucks or Convict. The project overview lists every recognised package from `package.json`.
+- **Used by** and **Uses:** the connections to follow next.
+
+Explanations live in `.codetolife/explanations.json` in the analyzed project. Files are keyed by path and functions by `path#name`, so moving code keeps its explanation. To write them, connect the [MCP server](#mcp-server) to Claude Code and ask it to explain the project for a new developer. It calls `explain_next` to get the most connected files and functions first, then `save_explanation` for each one. Select **Refresh** in the browser to see new explanations. You can also have [OpenRouter or your own AI server](#explanations-from-openrouter-or-a-local-ai-server) write them. Commit the file to share them with your team, or add `.codetolife/explanations.json` to `.gitignore` to keep them to yourself.
+
+### Explanations from OpenRouter or a local AI server
+
+Code to Life can write explanations with any OpenAI-compatible chat API, such as [OpenRouter](https://openrouter.ai), Unsloth Studio, LM Studio, Ollama or llama.cpp. Add `--ai` when you start it. An **Explain with AI** button then appears in the side panel for anything without an explanation, or with an out-of-date one.
+
+API keys are read from environment variables only, so they never appear in your shell history or in the browser.
+
+For OpenRouter, set `OPENROUTER_API_KEY`. The default model is `openrouter/auto`; choose another with `--ai-model`.
+
+~~~powershell
+$env:OPENROUTER_API_KEY = '<your OpenRouter key>'
+node .\bin\codetolife.mjs C:\code\my-frontend --ai openrouter --ai-model <model ID from openrouter.ai/models>
+~~~
+
+For your own server, pass its address. If the URL doesn't end in `/v1`, Code to Life calls `/v1/chat/completions` on the same host, so a web UI address such as `http://my-gpu-box:8888/chat` works too. Set `CODETOLIFE_AI_KEY` if the server needs an API key. In Unsloth Studio, create one under its API key settings. Servers that run one loaded model, such as Unsloth Studio, ignore `--ai-model`.
+
+~~~powershell
+$env:CODETOLIFE_AI_KEY = '<your server key>'
+node .\bin\codetolife.mjs C:\code\my-frontend --ai http://my-gpu-box:8888
+~~~
+
+To explain many things at once, use `explain`. It writes up to `--limit` explanations (10 by default), most connected first, and skips anything already explained and still current. Run it again to continue.
+
+~~~powershell
+node .\bin\codetolife.mjs explain C:\code\my-frontend --ai http://my-gpu-box:8888 --limit 25
+~~~
+
+Each request sends the selected code, its file path, the packages it imports and the names of its connections to the server you chose. Use a local server for code that must not leave your network.
+
 The analyzer reads the root `tsconfig.json` or `jsconfig.json` and follows TypeScript project references. It also scans source files outside those configurations. TypeScript path aliases and package resolution follow those compiler settings. Framework-specific virtual modules, bundler-only aliases, Vue and Svelte single-file components, and dynamic dispatch may leave gaps. Test reachability is inferred from source and cannot measure execution or assertions.
 
 ### Git changes with PR Buddy JS
@@ -123,8 +162,14 @@ Register a local **stdio** server in any MCP client. Pass your project folder as
 }
 ~~~
 
-The server offers `overview`, `find`, `describe`, `callers`, `callees`, `path_between`, `impact`, `tests_for`, `check_architecture`, and `what_changed`.
-Use graph node IDs from `find` when names are ambiguous. The graph is cached for the session. Call `overview` with `{"refresh": true}` after editing files. `what_changed` also rebuilds the graph before comparing Git changes. These tools are read-only and use the project selected at launch.
+The server offers `overview`, `find`, `describe`, `callers`, `callees`, `path_between`, `impact`, `tests_for`, `check_architecture`, `what_changed`, `explain_next`, and `save_explanation`.
+Use graph node IDs from `find` when names are ambiguous. The graph is cached for the session. Call `overview` with `{"refresh": true}` after editing files. `what_changed` also rebuilds the graph before comparing Git changes. All tools use the project selected at launch. Only `save_explanation` writes, and only to `.codetolife/explanations.json`.
+
+With Claude Code, register the server from a terminal:
+
+~~~powershell
+claude mcp add codetolife-js -- node C:/code/code-to-life-js/bin/codetolife-mcp.mjs C:/code/my-frontend
+~~~
 
 ### Optional MCP debugger
 
