@@ -82,3 +82,32 @@ dl.glossary dd { margin: .15rem 0 0; color: var(--muted); font-size: .82rem; lin
 .ai-explain { margin-top: .6rem; }
 .ai-explain button { border-color: #5c8f7f; }
 .ai-explain button:disabled { cursor: default; opacity: .55; }
+
+#tour-toggle[aria-pressed="true"] { border-color: #ffd479; color: #ffd479; }
+#pages-toggle[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+#tour { background: #1f2630; border-left: 3px solid #ffd479; }
+.tour-progress { color: #ffd479; font-size: .8rem; }
+#tour h3 { color: #e6eaf1; overflow-wrap: anywhere; }
+.tour-reason { color: #e6eaf1; }
+#tour .controls { margin-top: .7rem; }
+#tour button:disabled { cursor: default; opacity: .45; }
+.learn-action { margin-top: .7rem; }
+.page-list button { display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .5rem; }
+.page-list button[aria-current="true"] { border-color: var(--accent); }
+.method { font: 600 .72rem ui-monospace, Consolas, monospace; padding: .05rem .35rem; border-radius: 4px;
+  background: #2c4a40; color: #9ff0d3; }
+.method-post, .method-put, .method-patch { background: #4a3f22; color: #ffd98a; }
+.method-delete { background: #4d2a2a; color: #ffaaa5; }
+.path { font: .82rem ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.path.dynamic { color: var(--muted); font-style: italic; }
+.handler { flex-basis: 100%; color: var(--muted); font-size: .75rem; }
+ol.flow { margin: .8rem 0 0; padding-left: 1.3rem; }
+ol.flow > li { color: var(--muted); font-size: .85rem; margin-top: .75rem; padding-left: .2rem; }
+ol.flow > li::marker { color: var(--accent); font-weight: 600; }
+ol.flow strong { color: #e6eaf1; font-size: .88rem; }
+ol.flow p { margin-top: .2rem; }
+ol.flow ul { margin-top: .3rem; }
+.flow-calls li + li { margin-top: .15rem; }
+button.link { background: none; border: 0; padding: .1rem 0; color: var(--accent); text-align: left;
+  text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; font-size: .82rem; }
+button.link:hover { color: #b6f5df; }

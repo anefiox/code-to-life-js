@@ -24,12 +24,26 @@ For a global command from a local checkout, run `npm link` once in this reposito
 
 ## Explore the graph
 
+- **Folders** opens first. It groups files into at most 14 folders and shows how many imports run between them. Select a folder to read what that kind of folder is usually for, see which folders it uses and is used by, and list its files.
 - **Modules** shows local imports and re-exports. Switch to **Symbols** for declarations, calls, class relationships, and JSX render edges. Select a node to follow its incoming and outgoing relationships.
 - Search by file path or symbol name. Select a symbol to see test files that reach it through static calls. Use **Refresh** after editing source.
 - Pass `--json` to export the graph and rule violations.
 - Open **What changed** to compare the working tree, including untracked files, with the merge base. Leave the base blank to use PR Buddy’s default branch lookup or enter a branch or commit. The graph outlines changed modules and symbols. Expand a file to see its semantic changes and findings, including deleted files and changes outside the source graph.
 
 ### Learn a new codebase
+
+**Start here** gives a guided reading order of up to 12 files. It begins where the app starts: the `main` file in `package.json`, the file a `start`, `dev` or `serve` script runs, or a conventional name such as `src/index.js`. It then follows the import that brings in the most code, tracing the app's backbone down to its pages, and finishes with the shared files most others use. Each step says why the file matters and opens its code. Use **Next** and **Back** to move through it.
+
+**Pages** lists every page and API address the app answers, and shows what happens when someone visits one. In order, it shows:
+
+- the request;
+- what the framework does first;
+- where the route is defined;
+- the handler;
+- the code the handler calls, up to three calls deep;
+- the page template, with its source.
+
+The graph highlights the path. Code to Life recognises Hapi route objects (`{ method, path, handler }`, including handlers spread in from controller objects) and Express-style calls such as `app.get('/path', handler)`. It finds templates from `h.view('name')` and `res.render('name')` calls. Addresses built at run time, such as `config.get('path')`, are shown as written in the code.
 
 Select any file or function to read it in the side panel. The panel shows:
 
@@ -68,7 +82,7 @@ node .\bin\codetolife.mjs explain C:\code\my-frontend --ai http://my-gpu-box:888
 
 Each request sends the selected code, its file path, the packages it imports and the names of its connections to the server you chose. Use a local server for code that must not leave your network.
 
-The analyzer reads the root `tsconfig.json` or `jsconfig.json` and follows TypeScript project references. It also scans source files outside those configurations. TypeScript path aliases and package resolution follow those compiler settings. Framework-specific virtual modules, bundler-only aliases, Vue and Svelte single-file components, and dynamic dispatch may leave gaps. Test reachability is inferred from source and cannot measure execution or assertions.
+The analyzer reads the root `tsconfig.json` or `jsconfig.json` and follows TypeScript project references. It also maps Node subpath imports from `package.json` `"imports"`, such as `"#/*": "./src/*"`. It also scans source files outside those configurations. TypeScript path aliases and package resolution follow those compiler settings. Framework-specific virtual modules, bundler-only aliases, Vue and Svelte single-file components, and dynamic dispatch may leave gaps. Test reachability is inferred from source and cannot measure execution or assertions.
 
 ### Git changes with PR Buddy JS
 

@@ -10,6 +10,7 @@ import { browserDebugger, browserOptions } from '../lib/browser-debug.mjs';
 import { ExplainError, explanationQueue, explanationsFor, projectGlossary, readSource, saveExplanation } from '../lib/explain.mjs';
 import { aiConfig, aiOptions, askAi, explanationPrompt } from '../lib/ai.mjs';
 import { glossaryFor } from '../lib/glossary.mjs';
+import { readTemplate, routeFlows, startTour } from '../lib/learn.mjs';
 
 const usage = [
   'Usage: codetolife-js [project] [--port PORT | --json]',
@@ -23,6 +24,7 @@ const assets = new Map([
   ['/', ['index.html', 'text/html']],
   ['/app.js', ['app.js', 'text/javascript']],
   ['/plan.js', ['plan.js', 'text/javascript']],
+  ['/learn.js', ['learn.js', 'text/javascript']],
   ['/style.css', ['style.css', 'text/css']],
   ['/cytoscape.min.js', ['cytoscape.min.js', 'text/javascript']]
 ]);
@@ -113,11 +115,22 @@ function serve(root, port, debug, ai) {
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify(source));
         return;
       }
+      if (url.pathname === '/api/learn') {
+        const body = JSON.stringify({ tour: startTour(root, graph), pages: routeFlows(root, graph) });
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(body);
+        return;
+      }
+      if (url.pathname === '/api/template') {
+        const body = JSON.stringify(readTemplate(root, url.searchParams.get('file')));
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(body);
+        return;
+      }
       if (url.pathname === '/api/explanations') {
-        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({
+        const body = JSON.stringify({
           explanations: explanationsFor(root, graph), glossary: projectGlossary(root),
           ai: ai ? { label: ai.label, model: ai.model } : null
-        }));
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(body);
         return;
       }
       if (url.pathname === '/api/changes') {
@@ -138,6 +151,10 @@ function serve(root, port, debug, ai) {
       const data = fs.readFileSync(new URL('../web/' + file, import.meta.url));
       res.writeHead(200, { 'Content-Type': type + '; charset=utf-8' }).end(data);
     } catch (error) {
+      if (res.headersSent) {
+        res.destroy(error);
+        return;
+      }
       if (error instanceof ExplainError) {
         res.writeHead(error.status, { 'Content-Type': 'text/plain; charset=utf-8' }).end(error.message);
         return;

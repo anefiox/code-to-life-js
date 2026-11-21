@@ -35,6 +35,16 @@ const cy = cytoscape({
     { selector: 'node.stack-frame', style: { 'background-color': '#fac072' } },
     { selector: 'node.stack-top', style: { 'background-color': '#ff895d', 'border-width': 3, 'border-color': '#ffe1bd' } },
     { selector: 'edge.stack-edge', style: { width: 3, 'line-color': '#fac072', 'target-arrow-color': '#fac072' } },
+    { selector: 'node.folder', style: {
+      shape: 'round-rectangle', width: 'data(size)', height: 'data(size)', 'background-color': '#26303d',
+      'border-width': 2, 'border-color': '#a6a5f4', 'text-valign': 'center', 'text-margin-y': 0, 'text-wrap': 'wrap',
+      'text-max-width': 150, 'font-size': 12, 'text-background-opacity': 0, 'min-zoomed-font-size': 0
+    } },
+    { selector: 'node.folder.test', style: { 'border-color': '#e4c478' } },
+    { selector: 'edge.folder-edge', style: { width: 'data(weight)', 'arrow-scale': 0.9 } },
+    { selector: 'node.tour-seen', style: { 'border-width': 3, 'border-color': '#b8954a' } },
+    { selector: 'node.tour-current', style: { 'border-width': 5, 'border-color': '#ffd479' } },
+    { selector: 'node.flow-step', style: { 'border-width': 2, 'border-color': '#83e0c2' } },
     { selector: '.dimmed', style: { opacity: 0.13 } }
   ],
   minZoom: 0.05, maxZoom: 3
@@ -68,6 +78,19 @@ function indexEdges(graph) {
 
 function render() {
   const graph = state.graph;
+  if (byId('view').value === 'folders') {
+    cy.elements().remove();
+    cy.add(folderElements(graph));
+    arrange();
+    const folders = cy.nodes().length;
+    const files = graph.nodes.filter(node => node.kind === 'module').length;
+    byId('status').textContent = folders + (folders === 1 ? ' folder · ' : ' folders · ') +
+      files + (files === 1 ? ' file' : ' files');
+    paintStack();
+    paintProfile();
+    overview();
+    return;
+  }
   const modules = byId('view').value === 'modules';
   const tests = new Set(graph.tests);
   const violations = new Set(graph.violations.map(edge => edge.id));
@@ -125,11 +148,13 @@ function arrange() {
   }
   if (isolated.length) {
     const box = connected.length ? connected.boundingBox({ includeLabels: true }) : { x1: 0, y2: 0, w: 0 };
-    const cell = Math.max(...isolated.map(node => node.boundingBox({ includeLabels: true }).w)) + 40;
+    const boxes = isolated.map(node => node.boundingBox({ includeLabels: true }));
+    const cell = Math.max(...boxes.map(box => box.w)) + 40;
+    const row = Math.max(64, Math.max(...boxes.map(box => box.h)) + 28);
     const columns = Math.max(1, Math.floor(Math.max(box.w, Math.sqrt(isolated.length) * cell * 1.5) / cell));
     const top = box.y2 + (connected.length ? 110 : 0);
     isolated.sort((a, b) => a.id().localeCompare(b.id())).forEach((node, index) => {
-      node.position({ x: box.x1 + (index % columns + 0.5) * cell, y: top + Math.floor(index / columns) * 64 });
+      node.position({ x: box.x1 + (index % columns + 0.5) * cell, y: top + Math.floor(index / columns) * row });
     });
   }
   cy.resize();
@@ -217,8 +242,8 @@ async function loadExplanations() {
     state.ai = null;
     byId('status').textContent = 'Explanations unavailable: ' + error.message;
   }
-  if (state.inspecting) inspect(state.inspecting);
-  else overview();
+  if (state.inspecting && state.items.has(state.inspecting)) inspect(state.inspecting);
+  else if (!restoreLearnView()) overview();
 }
 
 function codeBlock(source) {
@@ -278,7 +303,7 @@ function focus(id) {
   const data = state.items.get(id);
   if (!data) return;
   if (cy.getElementById(id).empty()) {
-    byId('view').value = 'symbols';
+    byId('view').value = data.kind === 'module' ? 'modules' : 'symbols';
     render();
   }
   const node = cy.getElementById(id);
@@ -392,6 +417,7 @@ function applyGraph(graph) {
   render();
   search();
   loadExplanations();
+  loadLearn();
   byId('rules').hidden = !graph.violations.length;
   byId('violations').replaceChildren(...graph.violations.map(edge =>
     listRow(edge.file + ' → ' + edge.target + (edge.because ? ' · ' + edge.because : ''), () => focus(edge.from))));
@@ -550,10 +576,20 @@ async function refresh(force = false) {
 }
 
 cy.on('tap', 'node', event => {
-  if (state.items.has(event.target.id())) inspect(event.target.id());
+  const id = event.target.id();
+  if (id.startsWith('folder:')) inspectFolder(id);
+  else if (state.items.has(id)) inspect(id);
 });
 initPlan();
-cy.on('tap', event => { if (event.target === cy) overview(); });
+cy.on('tap', event => {
+  if (event.target !== cy) return;
+  learn.flow = null;
+  clearSpotlight();
+  showPages();
+  overview();
+});
+byId('tour-toggle').addEventListener('click', () => setTourOpen(byId('tour').hidden));
+byId('pages-toggle').addEventListener('click', () => setPagesOpen(byId('pages').hidden));
 byId('fit').addEventListener('click', () => cy.fit(undefined, 36));
 byId('view').addEventListener('change', () => {
   if (state.graph) render();

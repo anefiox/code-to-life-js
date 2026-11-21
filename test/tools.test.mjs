@@ -91,7 +91,7 @@ test('browser entry point serves the local graph and blocks cross-origin request
   const page = await fetch(url);
   assert.equal(page.status, 200);
   assert.match(await page.text(), /<title>Code to Life<\/title>/);
-  for (const asset of ['/style.css', '/app.js', '/plan.js', '/cytoscape.min.js']) {
+  for (const asset of ['/style.css', '/app.js', '/plan.js', '/learn.js', '/cytoscape.min.js']) {
     const response = await fetch(url + asset);
     assert.equal(response.status, 200);
     await response.arrayBuffer();
@@ -119,6 +119,20 @@ test('browser entry point serves the local graph and blocks cross-origin request
   }
   const explanations = await (await fetch(url + '/api/explanations')).json();
   assert.deepEqual(explanations, { explanations: {}, glossary: [], ai: null });
+  const guided = await (await fetch(url + '/api/learn')).json();
+  assert.equal(guided.tour.steps[0].file, 'main.js');
+  assert.deepEqual(guided.pages, { framework: null, before: null, routes: [] });
+  for (const file of ['main.js', '../secret.njk']) {
+    const template = await fetch(url + '/api/template?' + new URLSearchParams({ file }));
+    assert.equal(template.status, 404);
+    await template.text();
+  }
+  put('.codetolife/explanations.json', '{ not json');
+  const corrupt = await fetch(url + '/api/explanations');
+  assert.equal(corrupt.status, 400);
+  assert.match(await corrupt.text(), /invalid JSON/);
+  assert.equal((await fetch(url + '/api/learn')).status, 200, 'server survives a bad explanations file');
+  fs.rmSync(path.join(root, '.codetolife', 'explanations.json'));
   const noAi = await fetch(url + '/api/explain?id=x', { method: 'POST', headers: { Origin: url } });
   assert.equal(noAi.status, 404);
   assert.match(await noAi.text(), /--ai/);

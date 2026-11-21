@@ -197,7 +197,7 @@ test('Code to Life browser UI searches JSX, highlights changes, and saves a plan
       return reply.result.value;
     };
 
-    await until(() => evaluate('document.querySelector("#status")?.textContent.includes("2 nodes")'));
+    await until(() => evaluate('document.querySelector("#status")?.textContent.includes("1 folder · 2 files")'));
     assert.ok(await evaluate('Boolean(document.querySelector("#graph canvas"))'));
     await evaluate('document.querySelector("#view").value = "symbols";' +
       'document.querySelector("#view").dispatchEvent(new Event("change"))');

@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/style.css">
   <script src="/cytoscape.min.js" defer></script>
   <script src="/plan.js" defer></script>
+  <script src="/learn.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -15,9 +16,12 @@
     <div class="controls">
       <input id="search" type="search" placeholder="Search files and symbols" aria-label="Search files and symbols">
       <select id="view" aria-label="Graph view">
+        <option value="folders" selected>Folders</option>
         <option value="modules">Modules</option>
         <option value="symbols">Symbols</option>
       </select>
+      <button id="tour-toggle" aria-pressed="false" aria-controls="tour">Start here</button>
+      <button id="pages-toggle" aria-pressed="false" aria-controls="pages">Pages</button>
       <button id="fit">Fit graph</button>
       <button id="refresh">Refresh</button>
       <button id="plan-toggle" aria-pressed="false" aria-controls="plan">Plan</button>
@@ -31,6 +35,8 @@
       <p id="status" role="status">Loading project…</p>
     </section>
     <aside aria-label="Graph details">
+      <section id="tour" hidden aria-live="polite"></section>
+      <section id="pages" hidden></section>
       <section id="matches" hidden><h2>Search results</h2><ul id="results"></ul></section>
       <section id="plan" hidden>
         <h2>Plan</h2>
