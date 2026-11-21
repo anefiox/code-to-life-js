@@ -6,7 +6,8 @@ const cy = cytoscape({
     { selector: 'node', style: {
       label: 'data(label)', color: '#e6eaf1', 'font-size': 11, 'text-valign': 'bottom', 'text-margin-y': 6,
       'text-background-color': '#191f27', 'text-background-opacity': 0.94, 'text-background-padding': 2,
-      'text-max-width': 140, 'text-wrap': 'ellipsis', 'background-color': '#83e0c2', width: 18, height: 18
+      'text-max-width': 130, 'text-wrap': 'ellipsis', 'min-zoomed-font-size': 4,
+      'background-color': '#83e0c2', width: 18, height: 18
     } },
     { selector: 'node.module', style: { shape: 'round-rectangle', 'background-color': '#a6a5f4', width: 30, height: 22 } },
     { selector: 'node.test', style: { 'background-color': '#e4c478' } },
@@ -95,11 +96,41 @@ function render() {
   const proposed = planElements(selected);
   cy.elements().remove();
   cy.add([...elements, ...proposed]);
-  cy.layout({ name: nodes.length > 250 ? 'grid' : 'cose', animate: false, padding: 40 }).run();
+  arrange();
   byId('status').textContent = cy.nodes().length + ' nodes · ' + cy.edges().length + ' connections';
   paintStack();
   paintProfile();
   overview();
+}
+
+// Lays out connected nodes with label-aware spacing, then places unconnected
+// nodes in an evenly spaced grid underneath so their labels never collide.
+function arrange() {
+  const nodes = cy.nodes();
+  const isolated = nodes.filter(node => node.degree(false) === 0);
+  const connected = nodes.difference(isolated);
+  const shared = { animate: false, fit: false, nodeDimensionsIncludeLabels: true };
+  const group = connected.union(connected.edgesWith(connected));
+  if (connected.length > 250) {
+    group.layout({ ...shared, name: 'grid', avoidOverlap: true, avoidOverlapPadding: 28 }).run();
+  } else if (connected.length) {
+    group.layout({
+      ...shared, name: 'cose', randomize: true, numIter: 2500, gravity: 0.2,
+      nodeRepulsion: () => 30000, idealEdgeLength: () => 70, edgeElasticity: () => 100,
+      nodeOverlap: 40, componentSpacing: 90, padding: 40
+    }).run();
+  }
+  if (isolated.length) {
+    const box = connected.length ? connected.boundingBox({ includeLabels: true }) : { x1: 0, y2: 0, w: 0 };
+    const cell = Math.max(...isolated.map(node => node.boundingBox({ includeLabels: true }).w)) + 40;
+    const columns = Math.max(1, Math.floor(Math.max(box.w, Math.sqrt(isolated.length) * cell * 1.5) / cell));
+    const top = box.y2 + (connected.length ? 110 : 0);
+    isolated.sort((a, b) => a.id().localeCompare(b.id())).forEach((node, index) => {
+      node.position({ x: box.x1 + (index % columns + 0.5) * cell, y: top + Math.floor(index / columns) * 64 });
+    });
+  }
+  cy.resize();
+  cy.fit(undefined, 36);
 }
 
 function overview() {
