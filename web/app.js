@@ -23,6 +23,7 @@ const cy = cytoscape({
     { selector: 'node.changed-added', style: { 'border-color': '#83e0c2' } },
     { selector: 'node.changed-signature', style: { 'border-color': '#e4c478' } },
     { selector: 'node.changed-cosmetic', style: { 'border-color': '#a4afbf' } },
+    { selector: 'node.read', style: { 'border-width': 2, 'border-color': '#5c8f7f', 'border-style': 'double' } },
     { selector: 'node:selected', style: { 'border-width': 3, 'border-color': 'white' } },
     { selector: 'node.cpu-sampled', style: { 'background-color': 'data(cpuColor)' } },
     { selector: 'node.proposed', style: {
@@ -45,6 +46,16 @@ const cy = cytoscape({
     { selector: 'node.tour-seen', style: { 'border-width': 3, 'border-color': '#b8954a' } },
     { selector: 'node.tour-current', style: { 'border-width': 5, 'border-color': '#ffd479' } },
     { selector: 'node.flow-step', style: { 'border-width': 2, 'border-color': '#83e0c2' } },
+    { selector: 'node.flow-now', style: { 'border-width': 5, 'border-color': '#ffd479', width: 26, height: 26 } },
+    { selector: 'node.template', style: { shape: 'round-rectangle', width: 30, height: 22, 'background-color': '#7fb3ff' } },
+    { selector: 'node.template-layout', style: { 'background-color': '#c492ee', width: 38, height: 26 } },
+    { selector: 'node.template-component', style: { 'background-color': '#83e0c2', shape: 'hexagon' } },
+    { selector: 'node.template-partial', style: { 'background-color': '#a4afbf' } },
+    { selector: 'node.template-external', style: { shape: 'round-rectangle', 'background-color': '#3a4554',
+      'border-width': 2, 'border-color': '#7fb3ff', 'border-style': 'dashed', width: 34, height: 24 } },
+    { selector: 'node.template-handler', style: { shape: 'tag', 'background-color': '#9ff0d3', width: 24, height: 18 } },
+    { selector: 'edge.extends', style: { width: 2.4, 'line-color': '#c492ee', 'target-arrow-color': '#c492ee' } },
+    { selector: 'edge.renders', style: { 'line-style': 'dashed', 'line-color': '#83e0c2', 'target-arrow-color': '#83e0c2' } },
     { selector: '.dimmed', style: { opacity: 0.13 } }
   ],
   minZoom: 0.05, maxZoom: 3
@@ -78,6 +89,12 @@ function indexEdges(graph) {
 
 function render() {
   const graph = state.graph;
+  if (guide.playback) stopPlayback(false);
+  if (byId('view').value === 'templates') {
+    renderTemplates();
+    overview();
+    return;
+  }
   if (byId('view').value === 'folders') {
     cy.elements().remove();
     cy.add(folderElements(graph));
@@ -124,6 +141,7 @@ function render() {
   cy.add([...elements, ...proposed]);
   arrange();
   byId('status').textContent = cy.nodes().length + ' nodes · ' + cy.edges().length + ' connections';
+  paintRead();
   paintStack();
   paintProfile();
   overview();
@@ -180,6 +198,7 @@ function overview() {
   } else if (!explained) {
     details.append(explainHint());
   }
+  guideOverview(details);
   if (state.glossary.length) {
     details.append(element('h3', 'Tools this project uses'), glossaryList(state.glossary));
   }
@@ -236,6 +255,7 @@ async function loadExplanations() {
     state.explanations = data.explanations;
     state.glossary = data.glossary;
     state.ai = data.ai;
+    setConcepts(data.concepts);
   } catch (error) {
     state.explanations = {};
     state.glossary = [];
@@ -273,7 +293,9 @@ async function showSource(id, slot) {
     if (state.inspecting !== id) return;
     const label = source.start === 1 && source.end === source.total ?
       source.total + ' lines' : 'Lines ' + source.start + '–' + source.end + ' of ' + source.total;
-    slot.replaceChildren(element('h3', 'Code'), element('p', label), codeBlock(source));
+    const pre = codeBlock(source);
+    slot.replaceChildren(element('h3', 'Code'), element('p', label), pre);
+    markPendingLine(id, pre, source.start);
     if (source.glossary.length) slot.append(element('h3', 'Packages this file uses'), glossaryList(source.glossary));
   } catch (error) {
     if (state.inspecting === id) slot.replaceChildren(element('h3', 'Code'), element('p', error.message));
@@ -323,7 +345,7 @@ function inspect(id) {
   about.className = 'explanation';
   about.append(element('h3', 'What it does'));
   if (explanation) {
-    about.append(element('p', explanation.summary));
+    about.append(prose('p', explanation.summary));
     if (explanation.stale) {
       const stale = element('p', 'The code has changed since this was written, so it may be out of date.');
       stale.className = 'stale';
@@ -366,6 +388,7 @@ function inspect(id) {
     details.append(element('h3', 'Tests reaching this symbol'),
       element('p', tests.length ? tests.join(' · ') : 'No static call paths from test files.'));
   }
+  guideInspect(id, details);
 }
 
 function search() {
@@ -416,6 +439,7 @@ function applyGraph(graph) {
   indexEdges(graph);
   render();
   search();
+  resetGuide();
   loadExplanations();
   loadLearn();
   byId('rules').hidden = !graph.violations.length;
@@ -578,11 +602,15 @@ async function refresh(force = false) {
 cy.on('tap', 'node', event => {
   const id = event.target.id();
   if (id.startsWith('folder:')) inspectFolder(id);
+  else if (id.startsWith('template:')) inspectTemplate(id.slice('template:'.length));
+  else if (id.startsWith('thandler:')) focus(id.slice('thandler:'.length));
   else if (state.items.has(id)) inspect(id);
 });
 initPlan();
+initGuide();
 cy.on('tap', event => {
   if (event.target !== cy) return;
+  stopPlayback(false);
   learn.flow = null;
   clearSpotlight();
   showPages();

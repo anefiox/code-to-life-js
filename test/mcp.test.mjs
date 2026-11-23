@@ -29,7 +29,7 @@ test('opt-in MCP debugger launches a script, maps a breakpoint, steps, and stops
     ] });
     await client.connect(transport);
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 18);
+    assert.equal(tools.length, 24);
     assert.equal(tools.find(tool => tool.name === 'debug_launch').annotations.readOnlyHint, false);
     assert.equal(tools.find(tool => tool.name === 'debug_where').annotations.readOnlyHint, true);
 
@@ -88,7 +88,7 @@ test('stdio MCP client can query a project and use the optional Git review', { t
 
     await client.connect(transport);
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 12);
+    assert.equal(tools.length, 18);
     assert.ok(tools.every(tool => tool.annotations.readOnlyHint || tool.name === 'save_explanation'));
     assert.equal(tools.find(tool => tool.name === 'save_explanation').annotations.destructiveHint, false);
     const call = async (name, args = {}) => {

@@ -118,9 +118,32 @@ test('browser entry point serves the local graph and blocks cross-origin request
     await missing.text();
   }
   const explanations = await (await fetch(url + '/api/explanations')).json();
-  assert.deepEqual(explanations, { explanations: {}, glossary: [], ai: null });
+  assert.deepEqual({ ...explanations, concepts: undefined }, { explanations: {}, glossary: [], ai: null, concepts: undefined });
+  assert.ok(explanations.concepts.some(concept => concept.term === 'CSRF'));
   const guided = await (await fetch(url + '/api/learn')).json();
   assert.equal(guided.tour.steps[0].file, 'main.js');
+  assert.equal(typeof guided.folderNotes[''], 'string');
+  assert.ok(Array.isArray((await (await fetch(url + '/api/recipes')).json()).recipes));
+  assert.ok(Array.isArray((await (await fetch(url + '/api/settings')).json()).settings));
+  assert.deepEqual(await (await fetch(url + '/api/templates')).json(), { templates: [] });
+  assert.equal((await (await fetch(url + '/api/file?file=main.js')).json()).code, 'export function replaced() { return 1; }');
+  put('.env', 'SECRET=1\n');
+  const secret = await fetch(url + '/api/file?file=.env');
+  assert.equal(secret.status, 404);
+  await secret.text();
+  const guideResponse = await fetch(url + '/api/onboarding');
+  assert.match(guideResponse.headers.get('content-type'), /text\/markdown/);
+  assert.match(await guideResponse.text(), /^# Getting started with /);
+  const asked = await fetch(url + '/api/ask', { method: 'POST', headers: { Origin: url, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question: 'What does replaced do?' }) });
+  const answer = await asked.json();
+  assert.equal(answer.answer, null, 'without --ai, ask only finds the matching code');
+  assert.equal(answer.sources[0].name, 'replaced');
+  for (const headers of [{ Origin: url }, { 'Content-Type': 'application/json' }]) {
+    const refused = await fetch(url + '/api/ask', { method: 'POST', headers, body: '{"question":"replaced?"}' });
+    assert.equal(refused.status, 403);
+    await refused.text();
+  }
   assert.deepEqual(guided.pages, { framework: null, before: null, routes: [] });
   for (const file of ['main.js', '../secret.njk']) {
     const template = await fetch(url + '/api/template?' + new URLSearchParams({ file }));

@@ -26,6 +26,7 @@ For a global command from a local checkout, run `npm link` once in this reposito
 
 - **Folders** opens first. It groups files into at most 14 folders and shows how many imports run between them. Select a folder to read what that kind of folder is usually for, see which folders it uses and is used by, and list its files.
 - **Modules** shows local imports and re-exports. Switch to **Symbols** for declarations, calls, class relationships, and JSX render edges. Select a node to follow its incoming and outgoing relationships.
+- **Templates** appears when the project has page templates (Nunjucks, Handlebars, EJS and the like). It shows which layout each page extends, the partials and macros it pulls in, and the handlers that render it.
 - Search by file path or symbol name. Select a symbol to see test files that reach it through static calls. Use **Refresh** after editing source.
 - Pass `--json` to export the graph and rule violations.
 - Open **What changed** to compare the working tree, including untracked files, with the merge base. Leave the base blank to use PR Buddy’s default branch lookup or enter a branch or commit. The graph outlines changed modules and symbols. Expand a file to see its semantic changes and findings, including deleted files and changes outside the source graph.
@@ -51,6 +52,29 @@ Select any file or function to read it in the side panel. The panel shows:
 - **Code:** the file, or just the selected function, with line numbers.
 - **Packages this file uses:** what each third-party package is for, such as Hapi, Nunjucks or Convict. The project overview lists every recognised package from `package.json`.
 - **Used by** and **Uses:** the connections to follow next.
+- **Examples from tests:** the test cases that call it, as worked examples of real inputs and the results they expect.
+- **History:** the commits that last changed it and who made them, so you know who to ask.
+- **I've read this:** ticks it off. The project overview shows how much you've read and lets you pick up the **Start here** tour where you left off. Progress is kept in your browser only.
+
+Framework terms such as *onPreResponse*, *CSRF* or *middleware* are underlined wherever they appear in explanations, the tour and page flows. Hover over or tab to one to see what it means. The project overview lists every term that fits the project's packages.
+
+### How do I…, Settings and Ask
+
+**How do I…** has short checklists for common changes, worked out from the patterns the project already follows: run and test it, add a page, add a setting, add a component, add a template filter, add a server plugin or middleware, and add a test. Each step links to a real example to copy, at the right line. For example, *Add a page* finds the folder each page lives in, the files every page has, the router that registers them and the menu that links to them.
+
+**Settings** lists every setting the app reads: each entry in a [convict](https://github.com/mozilla/node-convict) schema, and any other `process.env` variable. For each one it shows the default (marked when it differs in production), its environment variable, where it is set for local runs (Compose files, `Dockerfile`, `.env.example` and workflows) and every place the code reads it. Values from `.env` files and settings marked `sensitive` are never shown.
+
+**Ask** answers questions such as *Where is cookie consent checked?* It finds the files and functions whose names, paths, routes and explanations best match, and lists them. Started with `--ai`, Code to Life also sends that code to the AI for a short written answer, with every file and function it mentions linked to the graph.
+
+**▶ Play it step by step** on any page in **Pages** walks through the request one step at a time, highlighting each function on the graph with its explanation and code, and ending with the template it fills in. Press **Play** to step through automatically.
+
+### Hotspots and the onboarding guide
+
+The project overview lists the **most changed files** from Git, with who changed them most. **Download onboarding guide** builds one Markdown page with the tools the project uses, how to run it, the folders, the Start here tour, every page, the settings, the recipes, the file explanations and the hotspots. Commit it as `ONBOARDING.md`, or build it from the command line:
+
+~~~powershell
+node .in\codetolife.mjs guide C:\code\my-frontend --out C:\code\my-frontend\ONBOARDING.md
+~~~
 
 Explanations live in `.codetolife/explanations.json` in the analyzed project. Files are keyed by path and functions by `path#name`, so moving code keeps its explanation. To write them, connect the [MCP server](#mcp-server) to Claude Code and ask it to explain the project for a new developer. It calls `explain_next` to get the most connected files and functions first, then `save_explanation` for each one. Select **Refresh** in the browser to see new explanations. You can also have [OpenRouter or your own AI server](#explanations-from-openrouter-or-a-local-ai-server) write them. Commit the file to share them with your team, or add `.codetolife/explanations.json` to `.gitignore` to keep them to yourself.
 
@@ -80,7 +104,7 @@ To explain many things at once, use `explain`. It writes up to `--limit` explana
 node .\bin\codetolife.mjs explain C:\code\my-frontend --ai http://my-gpu-box:8888 --limit 25
 ~~~
 
-Each request sends the selected code, its file path, the packages it imports and the names of its connections to the server you chose. Use a local server for code that must not leave your network.
+Each request sends the selected code, its file path, the packages it imports and the names of its connections to the server you chose. **Ask** sends your question, the list of pages, and the code and explanations of up to 10 matching files and functions. Use a local server for code that must not leave your network.
 
 The analyzer reads the root `tsconfig.json` or `jsconfig.json` and follows TypeScript project references. It also maps Node subpath imports from `package.json` `"imports"`, such as `"#/*": "./src/*"`. It also scans source files outside those configurations. TypeScript path aliases and package resolution follow those compiler settings. Framework-specific virtual modules, bundler-only aliases, Vue and Svelte single-file components, and dynamic dispatch may leave gaps. Test reachability is inferred from source and cannot measure execution or assertions.
 
@@ -176,7 +200,7 @@ Register a local **stdio** server in any MCP client. Pass your project folder as
 }
 ~~~
 
-The server offers `overview`, `find`, `describe`, `callers`, `callees`, `path_between`, `impact`, `tests_for`, `check_architecture`, `what_changed`, `explain_next`, and `save_explanation`.
+The server offers `overview`, `find`, `describe`, `callers`, `callees`, `path_between`, `impact`, `tests_for`, `check_architecture`, `what_changed`, `explain_next`, and `save_explanation`. For onboarding it also offers `how_to` (the recipes), `settings`, `templates`, `test_examples`, `history` (hotspots, or the commits behind one file or function) and `onboarding_guide`.
 Use graph node IDs from `find` when names are ambiguous. The graph is cached for the session. Call `overview` with `{"refresh": true}` after editing files. `what_changed` also rebuilds the graph before comparing Git changes. All tools use the project selected at launch. Only `save_explanation` writes, and only to `.codetolife/explanations.json`.
 
 With Claude Code, register the server from a terminal:

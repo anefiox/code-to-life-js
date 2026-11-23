@@ -10,7 +10,16 @@ import { browserDebugger, browserOptions } from '../lib/browser-debug.mjs';
 import { ExplainError, explanationQueue, explanationsFor, projectGlossary, readSource, saveExplanation } from '../lib/explain.mjs';
 import { aiConfig, aiOptions, askAi, explanationPrompt } from '../lib/ai.mjs';
 import { glossaryFor } from '../lib/glossary.mjs';
-import { readTemplate, routeFlows, startTour } from '../lib/learn.mjs';
+import { readProjectFile, readTemplate, routeFlows, startTour } from '../lib/learn.mjs';
+import { recipes } from '../lib/recipes.mjs';
+import { settingsMap } from '../lib/settings.mjs';
+import { templateMap } from '../lib/templates.mjs';
+import { conceptsFor } from '../lib/concepts.mjs';
+import { testExamples } from '../lib/examples.mjs';
+import { hotspots, nodeHistory } from '../lib/history.mjs';
+import { folderNotesFor } from '../lib/folders.mjs';
+import { onboardingGuide } from '../lib/onboarding.mjs';
+import { askPrompt, askSources } from '../lib/ask.mjs';
 
 const usage = [
   'Usage: codetolife-js [project] [--port PORT | --json]',
@@ -18,6 +27,7 @@ const usage = [
   '       codetolife-js [project] --browser-port PORT --browser-url URL [--break FILE:LINE]',
   '       codetolife-js [project] --ai openrouter|URL [--ai-model MODEL]',
   '       codetolife-js explain [project] --ai openrouter|URL [--ai-model MODEL] [--limit N]',
+  '       codetolife-js guide [project] [--out FILE]',
   '       codetolife-js check [project]'
 ].join('\n');
 const assets = new Map([
@@ -25,6 +35,7 @@ const assets = new Map([
   ['/app.js', ['app.js', 'text/javascript']],
   ['/plan.js', ['plan.js', 'text/javascript']],
   ['/learn.js', ['learn.js', 'text/javascript']],
+  ['/guide.js', ['guide.js', 'text/javascript']],
   ['/style.css', ['style.css', 'text/css']],
   ['/cytoscape.min.js', ['cytoscape.min.js', 'text/javascript']]
 ]);
@@ -42,6 +53,15 @@ function serve(root, port, debug, ai) {
     aiQueue = run.catch(() => {});
     return run;
   };
+  const askWithAi = question => {
+    const run = aiQueue.then(async () => {
+      const { messages, sources } = askPrompt(root, graph, question);
+      return { answer: await askAi(ai, messages, { maxTokens: 1200 }), sources };
+    });
+    aiQueue = run.catch(() => {});
+    return run;
+  };
+  const json = (res, value) => res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify(value));
   const server = createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'");
@@ -82,6 +102,42 @@ function serve(root, port, debug, ai) {
         }
         return;
       }
+      if (url.pathname === '/api/ask') {
+        if (req.method !== 'POST') {
+          res.writeHead(405, { Allow: 'POST' }).end();
+          return;
+        }
+        if (req.headers.origin !== 'http://' + req.headers.host || !/^application\/json\b/.test(req.headers['content-type'] ?? '')) {
+          res.writeHead(403).end();
+          return;
+        }
+        let body = '';
+        for await (const chunk of req) {
+          body += chunk;
+          if (body.length > 8192) {
+            res.writeHead(413).end();
+            return;
+          }
+        }
+        let question;
+        try {
+          question = JSON.parse(body).question;
+        } catch {
+          throw new ExplainError('Send JSON like {"question": "…"}.');
+        }
+        if (!ai) {
+          const { sources } = askSources(root, graph, question);
+          json(res, { answer: null, sources: sources.map(node => ({ id: node.id, name: node.name, file: node.file, kind: node.kind })) });
+          return;
+        }
+        try {
+          json(res, await askWithAi(question));
+        } catch (error) {
+          if (error instanceof ExplainError) throw error;
+          res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' }).end(error.message);
+        }
+        return;
+      }
       if (url.pathname === '/api/debug') {
         if (req.method !== 'GET' && req.method !== 'POST') {
           res.writeHead(405, { Allow: 'GET, POST' }).end();
@@ -116,8 +172,36 @@ function serve(root, port, debug, ai) {
         return;
       }
       if (url.pathname === '/api/learn') {
-        const body = JSON.stringify({ tour: startTour(root, graph), pages: routeFlows(root, graph) });
-        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(body);
+        json(res, { tour: startTour(root, graph), pages: routeFlows(root, graph), folderNotes: folderNotesFor(graph) });
+        return;
+      }
+      if (url.pathname === '/api/recipes') {
+        json(res, { recipes: recipes(root, graph) });
+        return;
+      }
+      if (url.pathname === '/api/settings') {
+        json(res, settingsMap(root, graph));
+        return;
+      }
+      if (url.pathname === '/api/templates') {
+        json(res, templateMap(root, graph));
+        return;
+      }
+      if (url.pathname === '/api/file') {
+        json(res, readProjectFile(root, url.searchParams.get('file')));
+        return;
+      }
+      if (url.pathname === '/api/examples') {
+        json(res, testExamples(root, graph, url.searchParams.get('id') ?? ''));
+        return;
+      }
+      if (url.pathname === '/api/history') {
+        const id = url.searchParams.get('id');
+        json(res, id ? nodeHistory(root, graph, id) : hotspots(root, graph));
+        return;
+      }
+      if (url.pathname === '/api/onboarding') {
+        res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' }).end(onboardingGuide(root, graph));
         return;
       }
       if (url.pathname === '/api/template') {
@@ -127,7 +211,7 @@ function serve(root, port, debug, ai) {
       }
       if (url.pathname === '/api/explanations') {
         const body = JSON.stringify({
-          explanations: explanationsFor(root, graph), glossary: projectGlossary(root),
+          explanations: explanationsFor(root, graph), glossary: projectGlossary(root), concepts: conceptsFor(root),
           ai: ai ? { label: ai.label, model: ai.model } : null
         });
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(body);
@@ -210,7 +294,7 @@ try {
     allowPositionals: true,
     options: {
       port: { type: 'string' }, json: { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
-      limit: { type: 'string' }, ...debugOptions, ...browserOptions, ...aiOptions
+      limit: { type: 'string' }, out: { type: 'string' }, ...debugOptions, ...browserOptions, ...aiOptions
     }
   });
   if (values.help) {
@@ -218,7 +302,9 @@ try {
   } else {
     const check = positionals[0] === 'check';
     const bulk = positionals[0] === 'explain';
-    const args = check || bulk ? positionals.slice(1) : positionals;
+    const guide = positionals[0] === 'guide';
+    const args = check || bulk || guide ? positionals.slice(1) : positionals;
+    if (values.out !== undefined && !guide) throw new Error(usage);
     const ai = aiConfig(values);
     if ((check || values.json) && ai) throw new Error(usage);
     if (values.limit !== undefined && !bulk) throw new Error(usage);
@@ -231,7 +317,16 @@ try {
       throw new Error(usage);
     }
     const root = projectRoot(args[0]);
-    if (bulk) {
+    if (guide) {
+      if (args.length > 1 || values.port !== undefined || values.json || ai) throw new Error(usage);
+      const text = onboardingGuide(root, analyze(root));
+      if (values.out) {
+        fs.writeFileSync(values.out, text);
+        console.log('Wrote ' + values.out + '.');
+      } else {
+        process.stdout.write(text);
+      }
+    } else if (bulk) {
       if (!ai) throw new Error('explain needs --ai openrouter or --ai URL.');
       await explainProject(root, ai, values.limit);
     } else if (check || values.json) {

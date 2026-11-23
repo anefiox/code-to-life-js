@@ -2,37 +2,7 @@
 // "Start here" tour, and what happens when a page is visited.
 const learn = { data: null, tourIndex: -1, flow: null, groups: null };
 
-const folderNotes = [
-  [/^(routes?|pages|app)$/, 'The pages and URLs the app answers. Each one pairs a web address with the code that handles it.'],
-  [/^controllers?$/, 'Request handlers: the code that runs when a page or API address is visited.'],
-  [/^plugins?$/, 'Plugins add features to the web server, such as logging, sessions, security headers or sign-in.'],
-  [/^middlewares?$/, 'Middleware runs on every request before it reaches a page, for example sign-in or logging.'],
-  [/^(config|configuration|settings|env)$/, 'Settings such as ports, URLs and feature switches, which change between your machine, test and live.'],
-  [/^(nunjucks|templates?|views?|layouts?|partials)$/, 'Page templates: the HTML the app fills in and sends to the browser.'],
-  [/^(auth|authentication|login|session)$/, 'Sign-in and access control: who the user is and what they may see.'],
-  [/^(logging|logger|logs|metrics|tracing)$/, 'Logging and monitoring: records what the app does so problems can be found.'],
-  [/^constants?$/, 'Fixed values shared across the app, such as status codes.'],
-  [/^(common|shared|lib|libs|utils?|helpers?|core)$/, 'Shared helpers used in many places across the app.'],
-  [/^components?$/, 'Reusable UI pieces that screens are built from.'],
-  [/^hooks?$/, 'React hooks: reusable logic that components call to share state and behaviour.'],
-  [/^(store|state|redux|slices)$/, 'App-wide state that several screens share.'],
-  [/^(services?|clients?|api)$/, 'Code that talks to other systems, such as APIs and databases, or holds business rules.'],
-  [/^(models?|schemas?|types|entities)$/, 'The shapes of the data the app works with.'],
-  [/^(client|frontend|public|assets|static|javascripts|stylesheets|styles|css)$/, 'Code and files that are sent to and run in the browser.'],
-  [/^(server|backend)$/, 'Code that runs on the server, not in the browser.'],
-  [/^(tests?|__tests__|test-helpers|mocks|__mocks__|fixtures|spec)$/, 'Test code and helpers. They check the app works, but do not run in the live service.'],
-  [/^(scripts|bin|tools|tasks)$/, 'Command-line scripts for developers. They are not part of the running app.'],
-  [/^src$/, 'The app\'s source code.']
-];
-
-function folderNote(dir) {
-  const parts = (dir || '').split('/').filter(Boolean).reverse();
-  for (const part of parts) {
-    const match = folderNotes.find(([pattern]) => pattern.test(part.toLowerCase()));
-    if (match) return match[1];
-  }
-  return dir ? null : 'Files at the top of the project, usually setup and configuration for tools.';
-}
+const folderNote = dir => learn.data?.folderNotes?.[dir] ?? null;
 
 // Groups files into at most 14 folders, merging the deepest folders into
 // their parents until the picture is small enough to take in at once.
@@ -100,7 +70,7 @@ function inspectFolder(id) {
     element('p', files + ' file' + (files === 1 ? '' : 's') + (group.tests ? ' · ' + group.tests + ' of them tests' : '')));
   const note = folderNote(group.dir);
   details.append(element('h3', 'What this folder is for'),
-    element('p', note ?? 'There is no description for this kind of folder. Its files are listed below.'));
+    prose('p', note ?? 'There is no description for this kind of folder. Its files are listed below.'));
   const show = element('button', 'Show these files on the graph');
   show.type = 'button';
   show.className = 'learn-action';
@@ -168,6 +138,7 @@ async function loadLearn() {
     byId('status').textContent = 'Guided views unavailable: ' + error.message;
   }
   showPages();
+  if (!state.inspecting && !learn.flow && !guide.playback && byId('details').firstChild?.textContent === 'Project overview') overview();
   if (learn.tourIndex >= 0) showTourStep(Math.min(learn.tourIndex, (learn.data?.tour.steps.length ?? 1) - 1));
 }
 
@@ -216,7 +187,9 @@ function showTourStep(index) {
   const progress = element('p', 'Step ' + (index + 1) + ' of ' + steps.length + ' · ' + roles[step.role]);
   progress.className = 'tour-progress';
   const file = element('h3', step.file);
-  const reason = element('p', step.reason);
+  const reason = prose('p', step.reason);
+  saveTourStep(Math.max(index, savedTourStep()));
+  setRead(step.id, true);
   reason.className = 'tour-reason';
   const controls = document.createElement('div');
   controls.className = 'controls';
@@ -294,8 +267,12 @@ function showFlow(route) {
   for (const step of route.steps) cy.getElementById(step.id).addClass('flow-step');
 
   const details = byId('details');
+  const play = element('button', '▶ Play it step by step');
+  play.type = 'button';
+  play.className = 'learn-action';
+  play.addEventListener('click', () => playFlow(route));
   details.replaceChildren(element('h2', route.method + ' ' + route.path),
-    element('p', 'What happens when someone visits this page, step by step.'));
+    element('p', 'What happens when someone visits this page, step by step.'), play);
   if (!route.fixedPath) {
     details.append(element('p', 'The address is worked out when the app runs, so it is shown as written in the code.'));
   }
@@ -309,13 +286,13 @@ function showFlow(route) {
   };
   add('The browser asks for the page', element('p', 'It sends a ' + route.method.split(',')[0] + ' request for ' +
     route.path + (route.method.startsWith('GET') ? ', for example by following a link.' : ', usually by submitting a form.')));
-  if (learn.data.pages.before) add('The server gets it ready', element('p', learn.data.pages.before));
+  if (learn.data.pages.before) add('The server gets it ready', prose('p', learn.data.pages.before));
   add('The route matches the address', link(route.file + ':' + route.line, () => focus('module:' + route.file)),
     element('p', 'This is where the address is connected to the code that handles it.'));
   if (handler) {
     const explained = state.explanations[route.handler];
     add('The handler runs', link(handler.name + ' · ' + handler.file + ':' + handler.line, () => focus(route.handler)),
-      element('p', explained?.summary ?? 'The handler builds the response: usually a page, sometimes a redirect or data.'));
+      prose('p', explained?.summary ?? 'The handler builds the response: usually a page, sometimes a redirect or data.'));
   }
   if (route.steps.length) {
     const calls = document.createElement('ul');

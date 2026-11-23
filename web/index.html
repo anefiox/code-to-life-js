@@ -8,6 +8,7 @@
   <script src="/cytoscape.min.js" defer></script>
   <script src="/plan.js" defer></script>
   <script src="/learn.js" defer></script>
+  <script src="/guide.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -19,9 +20,13 @@
         <option value="folders" selected>Folders</option>
         <option value="modules">Modules</option>
         <option value="symbols">Symbols</option>
+        <option value="templates" hidden>Templates</option>
       </select>
       <button id="tour-toggle" aria-pressed="false" aria-controls="tour">Start here</button>
       <button id="pages-toggle" aria-pressed="false" aria-controls="pages">Pages</button>
+      <button id="recipes-toggle" aria-pressed="false" aria-controls="recipes">How do I…</button>
+      <button id="settings-toggle" aria-pressed="false" aria-controls="settings">Settings</button>
+      <button id="ask-toggle" aria-pressed="false" aria-controls="ask">Ask</button>
       <button id="fit">Fit graph</button>
       <button id="refresh">Refresh</button>
       <button id="plan-toggle" aria-pressed="false" aria-controls="plan">Plan</button>
@@ -37,6 +42,9 @@
     <aside aria-label="Graph details">
       <section id="tour" hidden aria-live="polite"></section>
       <section id="pages" hidden></section>
+      <section id="ask" hidden></section>
+      <section id="recipes" hidden></section>
+      <section id="settings" hidden></section>
       <section id="matches" hidden><h2>Search results</h2><ul id="results"></ul></section>
       <section id="plan" hidden>
         <h2>Plan</h2>

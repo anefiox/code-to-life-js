@@ -9,6 +9,12 @@ import { GraphQueries } from '../lib/graph-queries.mjs';
 import { graphChanges } from '../lib/graph-changes.mjs';
 import { configuredDebugger, debugOptions } from '../lib/debug.mjs';
 import { explanationGuidance, explanationQueue, readSource, saveExplanation } from '../lib/explain.mjs';
+import { recipes } from '../lib/recipes.mjs';
+import { settingsMap } from '../lib/settings.mjs';
+import { templateMap } from '../lib/templates.mjs';
+import { testExamples } from '../lib/examples.mjs';
+import { hotspots, nodeHistory } from '../lib/history.mjs';
+import { onboardingGuide } from '../lib/onboarding.mjs';
 
 const selector = z.string().trim().min(1).max(4096).describe('Exact graph node ID, symbol name, or project-relative file.');
 const count = z.number().int().min(1).max(100).default(25);
@@ -136,6 +142,35 @@ function createServer(root, debug) {
       if (resolved.error) return resolved;
       return saveExplanation(root, index.graph, resolved.node.id, summary);
     }, { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+
+  tool('how_to', 'Step-by-step recipes for common changes in this project (add a page, a setting, a component, a ' +
+    'filter, a plugin or a test, and how to run it), worked out from the patterns it already follows, each step ' +
+    'pointing at an example file and line.', {}, () => ({ recipes: recipes(root, graph().graph) }));
+
+  tool('settings', 'Every setting and environment variable the app reads: its default, its environment variable, ' +
+    'where it is set for local runs, and every place the code reads it. Filter with query.',
+    { query: z.string().trim().max(200).optional(), ...paging }, ({ query, ...options }) => {
+      const map = settingsMap(root, graph().graph);
+      const term = query?.toLowerCase();
+      const items = term ? map.settings.filter(setting =>
+        (setting.key + ' ' + (setting.env ?? '') + ' ' + setting.doc).toLowerCase().includes(term)) : map.settings;
+      return { schema: map.schema, envFiles: map.envFiles, ...page(items, options) };
+    });
+
+  tool('templates', 'The page templates: which layout each extends, the partials and macros it uses, what uses it, ' +
+    'and the handlers and routes that render it.', paging, args => page(templateMap(root, graph().graph).templates, args));
+
+  tool('test_examples', 'Test cases that use a file or function, as worked examples of how it is called and what it returns.',
+    { node: selector }, args => single(args, (index, node) => testExamples(root, index.graph, node.id)));
+
+  tool('history', 'Git history. With node: the commits that last changed that file or function and who made them. ' +
+    'Without: the most changed files in the project (hotspots).', { node: selector.optional() },
+    ({ node }) => node ? single({ node }, (index, found) => nodeHistory(root, index.graph, found.id)) :
+      hotspots(root, graph().graph));
+
+  tool('onboarding_guide', 'A Markdown onboarding guide for the project: tools, how to run it, folders, the Start here ' +
+    'tour, pages, settings, how-to recipes, file explanations and hotspots. Suitable for committing as ONBOARDING.md.',
+    {}, () => ({ markdown: onboardingGuide(root, graph().graph) }));
 
   if (debug) {
     const snapshot = () => debug.snapshot(graph().graph);
